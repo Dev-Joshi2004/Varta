@@ -1,10 +1,10 @@
 .landingPageContainer {
   width: 100vw;
   height: 100vh;
-  background-image: url("/public/background.png");
+  background-color: white;
   background-repeat: no-repeat;
   background-size: cover;
-  color: white;
+  color: Black;
 }
 
 .landingPageContainer nav{
@@ -27,7 +27,7 @@
 }
 
 .landingPageContainer nav .navItem a{
-  color: white;
+  color: black;
   font-size: 1.8rem;
   font-weight: 500;
   text-decoration: none;
@@ -46,20 +46,25 @@
 }
 
 .landingPageMainContainer > div:nth-child(1) div[role='button'] {
-  background: #FF9839;
+  background: #1f65b6;
   width: fit-content;
   padding: 1rem;
   border-radius: 20px;
   margin-top: 1.9rem;
 }
 
+.landingPageMainContainer > div:nth-child(1) div[role='button']:hover{
+  background: #267adb;
+}
+
 .landingPageMainContainer > div:nth-child(1) div[role='button'] a{
   text-decoration: none;
   color: white;
   font-size: 1.7rem;
+  font-weight: 500;
 }
 
 .landingPageMainContainer .mainContainerImg img {
-  height: 70vh;
+  height: 65vh;
   width: auto;
 }

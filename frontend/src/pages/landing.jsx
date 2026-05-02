@@ -18,14 +18,14 @@ export default function Landing() {
 
             <div className="landingPageMainContainer">
                 <div className="mainContainerText">
-                    <h1><span style={{color: "#FF9839"}}>Connect</span> with your loved ones</h1>
+                    <h1><span style={{color: "#3995ff"}}>Connect</span> with your loved ones</h1>
                     <p>Cover a distance by Varta</p>
                     <div role='button'>
-                        <Link to={"/home"}>Get Started</Link>
+                        <Link to={"/auth"}>Get Started</Link>
                     </div>
                 </div>
                 <div className="mainContainerImg">
-                    <img src="/mobile.png" alt="" />
+                    <img src="/heroImg.png" alt="" />
                 </div>
             </div>
         </div>
