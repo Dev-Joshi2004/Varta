@@ -2,8 +2,6 @@
   width: 100vw;
   height: 100vh;
   background-color: white;
-  background-repeat: no-repeat;
-  background-size: cover;
   color: Black;
 }
 
@@ -66,5 +64,18 @@
 
 .landingPageMainContainer .mainContainerImg img {
   height: 65vh;
+  width: auto;
+}
+
+.authenticationPageMainContainer{
+  display: flex;
+  justify-content: space-between;
+  padding-inline: 3rem;
+  height: 100vh;
+  align-items: center;
+}
+
+.authenticationPageMainContainer .authenticationPageImg img{
+  height: 70vh;
   width: auto;
 }
