@@ -24,7 +24,7 @@ const login = async (req,res) => {
 
         console.log("Supabase Response:", user, "Error:", fetchError);
 
-        if(fetchError || !user.username){
+        if(fetchError || !user){
             return res.status(httpStatus.NOT_FOUND).json({message: "User not found. Please register first"});
         }
 
@@ -41,7 +41,9 @@ const login = async (req,res) => {
             .eq('username',username);
 
             if(updateError) throw updateError;
-            return res.status(httpStatus.OK).json({message:"Login successful", token: token});
+            return res.status(httpStatus.OK).json({token: token});
+        }else {
+            return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid Password" });
         }
     }catch(e){
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({message: `Something went wrong: ${e.message}`});
