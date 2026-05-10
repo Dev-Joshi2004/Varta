@@ -2,8 +2,6 @@ import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import MuiCard from '@mui/material/Card';
-import Checkbox from '@mui/material/Checkbox';
-import Divider from '@mui/material/Divider';
 import FormLabel from '@mui/material/FormLabel';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -56,7 +54,8 @@ export default function Authentication() {
         try{
             if(formState === 0){
                 let res = await handleLogin(username,password);
-                setMessage(res);
+                setMessage(res.message);
+                setOpen(true);
             }
             if(formState === 1){
                 let res = await handleRegister(name,username,password);
@@ -67,17 +66,17 @@ export default function Authentication() {
                 setPassword("");
             }
         }catch(err){
-            console.log(err.response.data.message);
-            if(err.response && err.response.data){
-                const errorMsg = err.response.data.message || "Something went wrong";
+            console.log(err.response?.data?.message);
+            const errorMsg = err.response?.data?.message;
+            if(errorMsg){
                 setMessage(errorMsg);
-                setError(errorMsg);
-                setOpen(true);
+                setError(errorMsg);  
             }
             else {
                 setMessage("Server unreachable. Please try again later.");
-                setOpen(true);
+                setError("Server unreachable. Please try again later.");
             }
+            setOpen(true);
         }
     }
 
@@ -213,6 +212,7 @@ export default function Authentication() {
                                 type="password"
                                 id="password"
                                 label="Password"
+                                value={password}
                                 autoFocus
                                 required
                                 fullWidth
