@@ -26,7 +26,7 @@ export default function VartaVideoComponent(){
 
     let [audioAvailable, setAudioAvailable] = useState(true);
 
-    let [video, setVideo] = useState([]);
+    let [video, setVideo] = useState(true);
 
     let [audio, setAudio] = useState();
 
@@ -95,7 +95,55 @@ export default function VartaVideoComponent(){
     },[]);
 
     let getUserMediaSuccess = (stream) => {
+        try{
 
+            window.localStream.getTracks().forEach(track => {track.stop()});
+        } catch(e){
+            console.log(e);
+        }
+
+        window.localStream = stream;
+        localVideoRef.current.srcObject = stream;
+
+        for(let id in connection){
+            if(id === socketIdRef.current) continue;
+            window.localStream.getTracks().forEach(track => {
+                connection[id].addTrack(track,window.localStream);
+            })
+
+            connection[id].createOffer().then((description) => {
+                connection[id].setLocalDescription(description).then(()=>{
+                    socketRef.current.emit('signal', id, JSON.stringify({'sdp': connection[id].localDescription}))
+                }).catch(e => console.log(e));
+            }).catch(e => console.log(e));
+        }
+
+        stream.getTracks().forEach(track => track.onended = () => {
+            setVideo(false);
+            setAudio(false);
+
+            try{
+                let tracks = localVideoRef.current.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+            } catch(e){
+                console.log(e);
+            }
+
+            let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+            window.localStream = blackSilence();
+            localVideoRef.current.srcObject = window.localStream;
+
+            for(let id in connection){
+                window.localStream.getTracks().forEach(track => {
+                    connection[id].addTrack(track,window.localStream);
+                })
+                connection[id].createOffer().then((description) => {
+                    connection[id].setLocalDescription(description).then(()=>{
+                        socketRef.current.emit('signal', id, JSON.stringify({'sdp': connection[id].localDescription}))
+                    }).catch(e => console.log(e));
+                }).catch(e => console.log(e));
+            }
+        })
     }
 
     let getUserMedia = async () => {
@@ -123,7 +171,26 @@ export default function VartaVideoComponent(){
     },[audio,video]);
 
     let gotMessageFromServer = (fromId, message) => {
+        var signal = JSON.parse(message);
 
+        if(fromId !== socketIdRef.current){
+            if(signal.sdp){
+                connection[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp)).then(() => {
+                    if(signal.sdp.type === 'offer'){
+
+                        connection[fromId].createAnswer().then((description) => {
+                            connection[fromId].setLocalDescription(description).then(() => {
+                                socketRef.current.emit('signal', fromId, JSON.stringify({'sdp': connection[fromId].localDescription}))
+                            }).catch(e => console.log(e));
+                        }).catch(e => console.log(e)); 
+                    }
+                }).catch(e => console.log(e));
+            }
+
+            if(signal.ice){
+                connection[fromId].addIceCandidate(new RTCIceCandidate(signal.ice)).catch(e => console.log(e));
+            }
+        }
     }
 
     let addMessage = () => {
@@ -142,10 +209,105 @@ export default function VartaVideoComponent(){
             socketRef.current.on('chat-message', addMessage);
 
             socketRef.current.on('user-left' , (id) => {
-                setVideo((videos) => videos.filter((video) => video.id !== id));
+                setVideos((videos) => videos.filter((video) => video.socketId !== id));
+            })
+
+            socketRef.current.on('user-joined' ,(id,clients) => {
+                if(!clients || clients.length === 0){
+                    console.log("No clients in the room");
+                    return;
+                }
+                clients.forEach((socketListId) => {
+                    connection[socketListId] = new RTCPeerConnection(peerConfiguration);
+
+                    connection[socketListId].onicecandidate = (event) => {
+                        if(event.candidate){
+                            socketRef.current.emit('signal', socketListId, JSON.stringify({'ice': event.candidate}))
+                        }
+                    }
+
+                    connection[socketListId].ontrack = (event) => {
+                        const remoteStream = event.streams[0];
+                        let videoExists = videoRef.current.find(video => video.socketId === socketListId);
+                        if(videoExists){
+                            setVideos((prevVideos) => {
+                                const updatedVideos = prevVideos.map((video) => {
+                                    return video.socketId === socketListId ? { ...video, stream: remoteStream } : video;
+                                })
+                                videoRef.current = updatedVideos;
+                                return updatedVideos;
+                            })
+                        }
+                        else{
+
+                            let newVideos = {
+                                socketId: socketListId,
+                                stream: remoteStream,
+                                autoPlay: true,
+                                playsinline: true
+                            }
+
+                            setVideos(prevVideos => {
+                                const updatedVideos = [...prevVideos, newVideos];
+                                videoRef.current = updatedVideos;
+                                return updatedVideos;
+                            })
+                        }
+                    }
+
+                    if(window.localStream !== undefined && window.localStream !== null){
+                        window.localStream.getTracks().forEach(track => {
+                            connection[socketListId].addTrack(track,window.localStream);
+                        })
+                    }
+                    else{
+                        //let blackSilence
+                        let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+                        window.localStream = blackSilence();
+                        window.localStream.getTracks().forEach(track => {
+                            connection[socketListId].addTrack(track,window.localStream);
+                        })
+                    }
+                })
+
+                if(id === socketIdRef.current){
+                    for(let id2 in connection){
+                        if(id2 === socketIdRef.current) continue;
+
+                        try{
+                            window.localStream.getTracks().forEach(track => {
+                                connection[id2].addTrack(track,window.localStream);
+                            })
+                        } catch {
+
+                        }
+
+                        connection[id2].createOffer().then((description)=>{
+                            connection[id2].setLocalDescription(description).then(() => {
+                                socketRef.current.emit('signal',id2,JSON.stringify({'sdp': connection[id2].localDescription}))
+                            }).catch(e => console.log(e));
+                        })
+                    }
+                }
             })
         })
     }
+
+    let silence = () =>{
+        let ctx = new AudioContext();
+        let oscillator = ctx.createOscillator();
+        let dst = oscillator.connect(ctx.createMediaStreamDestination());
+        oscillator.start();
+        ctx.resume();
+        return Object.assign(dst.stream.getAudioTracks()[0], {enabled: false});
+    }
+
+    let black = ({width = 640, height = 480} = {}) => {
+        let canvas = Object.assign(document.createElement('canvas'), {width, height});
+        canvas.getContext('2d').fillRect(0, 0, width, height);
+        let stream = canvas.captureStream();
+        return Object.assign(stream.getVideoTracks()[0], {enabled: false});  
+    }    
 
     let getMedia = () => {
         setVideo(videoAvailable);
@@ -169,7 +331,25 @@ export default function VartaVideoComponent(){
                     <div>
                         <video ref={localVideoRef} autoPlay muted></video>
                     </div>
-                </div> : <></>
+                </div> : 
+                <>
+                    <video ref={localVideoRef} autoPlay muted></video>
+
+                    {videos.map((video) => (
+                        <div key={video.socketId}>
+                            <h2>{video.socketId}</h2>
+                            <video 
+                                data-socket = {video.socketId}
+                                ref = {ref => {
+                                    if(ref && video.stream){
+                                        ref.srcObject = video.stream;
+                                    }
+                                }}
+                                autoPlay
+                            ></video>
+                        </div>
+                    ))}
+                </>
             }
 
         </div>

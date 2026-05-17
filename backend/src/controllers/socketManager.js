@@ -13,18 +13,20 @@ const connectToServer = (server)=>{
     });
 
     io.on("connection", (socket)=>{
+        console.log("Something connectd")
         console.log("User connected: " , socket.id);
 
         socket.on("join-call",(roomPath)=>{
 
             socket.join(roomPath);
+            const clients = Array.from(io.sockets.adapter.rooms.get(roomPath) || []);
             if(messages[roomPath] !== undefined){
                 messages[roomPath].forEach((msg) => {
                     io.to(socket.id).emit("chat-message", msg.data, msg.sender, msg.socketId);
                 });
             }
-            socket.to(roomPath).emit("user-joined", socket.id);
-            console.log(`User ${socket.id} joined room: ${roomPath}`);
+            io.to(roomPath).emit("user-joined", socket.id,clients);
+            console.log(`User ${socket.id} joined room: ${roomPath}. Total clients: ${clients.length}`);
         });
 
         socket.on("signal" ,(toId, message)=>{
