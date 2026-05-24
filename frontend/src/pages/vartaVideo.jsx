@@ -101,12 +101,136 @@ export default function VartaVideoComponent() {
         getPermission();
     }, []);
 
-    let handleVideoToggle = () => {
-        setVideo(!video);
+    let handleVideoToggle = async () => {
+        let nextVideoState = !video;
+        setVideo(nextVideoState);
+    
+        // CASE 1: Video OFF karni hai (Proper Black Screen bhejni hai)
+        if (nextVideoState === false) {
+            console.log("Switching to Black Screen...");
+    
+            // 1. Apne local camera track ko band karo (Hardware light turns off)
+            if (window.localStream) {
+                window.localStream.getVideoTracks().forEach(track => {
+                    track.enabled = false;
+                });
+            }
+    
+            // 2. Fake black track create karo
+            let blackTrack = black();
+    
+            // 3. Saare connected peers ke paas black track replace karke bhej do
+            for (let id in connection) {
+                let senders = connection[id].getSenders();
+                let videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
+                
+                if (videoSender && blackTrack) {
+                    videoSender.replaceTrack(blackTrack);
+                }
+            }
+        } 
+        // CASE 2: Video wapas ON karni hai (Camera dynamic reload)
+        else {
+            console.log("Restoring Camera Stream...");
+    
+            try {
+                // 1. Fresh camera tracks mangao browser se
+                let freshStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: audioAvailable });
+                let freshVideoTrack = freshStream.getVideoTracks()[0];
+    
+                // 2. Apne main localStream ke video track ko naye live track se badlo
+                if (window.localStream && freshVideoTrack) {
+                    let oldVideoTrack = window.localStream.getVideoTracks()[0];
+                    if (oldVideoTrack) {
+                        window.localStream.removeTrack(oldVideoTrack);
+                        oldVideoTrack.stop(); // Purane track ko memory se clean kiya
+                    }
+                    window.localStream.addTrack(freshVideoTrack);
+                }
+    
+                // 3. Apni screen wapas live video feed par sync karo
+                if (localVideoRef.current && window.localStream) {
+                    localVideoRef.current.srcObject = window.localStream;
+                }
+    
+                // 4. Peers ke pass black track hatakar fresh camera track replace karo
+                for (let id in connection) {
+                    let senders = connection[id].getSenders();
+                    let videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
+                    
+                    if (videoSender && freshVideoTrack) {
+                        videoSender.replaceTrack(freshVideoTrack);
+                    }
+                }
+            } catch (error) {
+                console.log("Camera fail to start on toggle:", error);
+                setVideo(false);
+            }
+        }
     }
 
     let handleAudioToggle = () => {
         setAudio(!audio);
+    }
+
+    let getDisplayMediaSuccess = (stream) => {
+        try {
+            window.localStream.getTracks().forEach(track => track.stop());
+        }
+        catch (e) {
+            console.log(e);
+        }
+
+        window.localStream = stream;
+        localVideoRef.current.srcObject = stream;
+
+        for (let id in connection){
+            if(id === socketIdRef.current) continue;
+            window.localStream.getTracks().forEach(track => {
+                connection[id].addTrack(track, window.localStream);
+            })
+
+            connection[id].createOffer().then((description) => {
+                connection[id].setLocalDescription(description).then(() => {
+                    socketRef.current.emit('signal', id, JSON.stringify({ 'sdp': connection[id].localDescription }))
+                }).catch(e => console.log(e));
+            }).catch(e => console.log(e));
+        }
+
+        stream.getTracks().forEach(track => track.onended = () => {
+            setScreenSharing(false);
+
+            try {
+                let tracks = localVideoRef.current.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+            } catch (e) {
+                console.log(e);
+            }
+
+            let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+            window.localStream = blackSilence();
+            localVideoRef.current.srcObject = window.localStream;
+
+            getUserMedia();
+        })
+    }
+
+    let getDisplayMedia = () => {
+        if(screenAvailable === true){
+            if(navigator.mediaDevices.getDisplayMedia) {
+                navigator.mediaDevices.getDisplayMedia({video : true, audio : true}).then(getDisplayMediaSuccess).then((stream) => {}).catch((e) => console.log(e));
+            }
+        }
+    }
+
+    useEffect(() => {
+        if(screenSharing !== undefined){
+            getDisplayMedia();
+        }
+    })
+
+    let handleScreen = () => {
+        setScreenSharing(!screenSharing);
     }
 
     let getUserMediaSuccess = (stream) => {
@@ -304,19 +428,35 @@ export default function VartaVideoComponent() {
     }
 
     let silence = () => {
-        let ctx = new AudioContext();
-        let oscillator = ctx.createOscillator();
-        let dst = oscillator.connect(ctx.createMediaStreamDestination());
-        oscillator.start();
-        ctx.resume();
-        return Object.assign(dst.stream.getAudioTracks()[0], { enabled: false });
+        try {
+            let ctx = new AudioContext();
+            let oscillator = ctx.createOscillator();
+            let dst = oscillator.connect(ctx.createMediaStreamDestination());
+            oscillator.start();
+            ctx.resume();
+            let track = dst.stream.getAudioTracks()[0];
+            if (track) {
+                return track;
+            }
+        } catch (e) {
+            console.log("Silence track error:", e);
+        }
+        
+        return null;
     }
-
+    
     let black = ({ width = 640, height = 480 } = {}) => {
         let canvas = Object.assign(document.createElement('canvas'), { width, height });
-        canvas.getContext('2d').fillRect(0, 0, width, height);
-        let stream = canvas.captureStream();
-        return Object.assign(stream.getVideoTracks()[0], { enabled: false });
+        let ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, width, height);
+        
+        let stream = canvas.captureStream(1); 
+        let track = stream.getVideoTracks()[0];
+        if (track) {
+            return track;
+        }
+        return null;
     }
 
     let getMedia = () => {
@@ -355,7 +495,7 @@ export default function VartaVideoComponent() {
                         </IconButton>
 
                         {screenAvailable === true ?
-                            <IconButton style={{ color: "white"}}>
+                            <IconButton onClick={handleScreen} style={{ color: "white"}}>
                                 {(screenSharing === true) ? <ScreenShareIcon /> : <StopScreenShareIcon />}
                             </IconButton>
                             :
