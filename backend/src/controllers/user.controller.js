@@ -79,4 +79,54 @@ const register = async (req,res) => {
     }
 }
 
-export {login, register};
+const getUserHistory = async (req,res) => {
+    const {token} = req.query;
+
+    try{
+        const user = await supabase.from('User').select('*').eq('token',token).single();
+        const meetingHistory = await supabase.from('Meeting').select('*').eq('user_id',user.data.id);
+        return res.status(httpStatus.FOUND).json({history : meetingHistory.data});
+    } catch(e) {
+        res.json({message : `Something went wrong : ${e}`});
+    }
+}
+
+const addMeetingToHistory = async (req, res) => {
+    const { token, meeting_code } = req.body;
+
+    if (!token || !meeting_code) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: "Token and meeting code are required" });
+    }
+
+    try {
+        // 1. User dhoondho token se
+        const { data: userData, error: userError } = await supabase
+            .from('User')
+            .select('id')
+            .eq('token', token)
+            .maybeSingle(); 
+
+        if (userError || !userData) {
+            return res.status(httpStatus.UNAUTHORIZED).json({ message: "Invalid or expired session token" });
+        }
+
+        console.log(`Adding meeting history for User ID: ${userData.id}`);
+
+        // 2. Meeting record insert karo
+        const { data, error: insertError } = await supabase
+            .from('Meeting')
+            .insert([{ 
+                user_id: userData.id, 
+                meeting_code: meeting_code 
+            }]);
+
+        if (insertError) throw insertError;
+
+        return res.status(httpStatus.CREATED).json({ message: "Meeting added to history successfully" });
+    } catch (e) {
+        console.error("History logging error:", e);
+        return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: `Something went wrong: ${e.message}` });
+    }
+}
+
+export {login, register , getUserHistory , addMeetingToHistory };
