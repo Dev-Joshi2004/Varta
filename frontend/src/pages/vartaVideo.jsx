@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styles from '../style/videoComponent.module.css';
-import { TextField, Button, IconButton, colors, Badge } from '@mui/material';
+import { TextField, Button, IconButton, Badge } from '@mui/material';
 import { io } from 'socket.io-client';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import VideocamOffIcon from '@mui/icons-material/VideocamOff';
@@ -10,6 +11,8 @@ import MicOffIcon from '@mui/icons-material/MicOff';
 import ScreenShareIcon from '@mui/icons-material/ScreenShare';
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare';
 import ChatIcon from '@mui/icons-material/Chat';
+import { AuthContext } from '../contexts/AuthContext';
+import { useContext } from 'react';
 
 const server_url = 'http://localhost:5000/';
 
@@ -23,6 +26,8 @@ const peerConfiguration = {
     ]
 }
 export default function VartaVideoComponent() {
+
+    const { addUserHistory } = useContext(AuthContext);
 
     var socketRef = useRef();
     let socketIdRef = useRef();
@@ -39,7 +44,7 @@ export default function VartaVideoComponent() {
 
     let [screenSharing, setScreenSharing] = useState();
 
-    let [showModal, setShowModal] = useState();
+    let [showModal, setShowModal] = useState(false);
 
     let [screenAvailable, setScreenAvailable] = useState();
 
@@ -47,11 +52,13 @@ export default function VartaVideoComponent() {
 
     let [userMessage, setUserMessage] = useState('');
 
-    let [newMessages, setNewMessages] = useState(4);
+    let [newMessages, setNewMessages] = useState(0);
 
     let [askForUsername, setAskForUsername] = useState(true);
 
     let [username, setUsername] = useState('');
+
+    const usernameRef = useRef('');
 
     const videoRef = useRef([]);
 
@@ -104,40 +111,40 @@ export default function VartaVideoComponent() {
     let handleVideoToggle = async () => {
         let nextVideoState = !video;
         setVideo(nextVideoState);
-    
+
         // CASE 1: Video OFF karni hai (Proper Black Screen bhejni hai)
         if (nextVideoState === false) {
             console.log("Switching to Black Screen...");
-    
+
             // 1. Apne local camera track ko band karo (Hardware light turns off)
             if (window.localStream) {
                 window.localStream.getVideoTracks().forEach(track => {
                     track.enabled = false;
                 });
             }
-    
+
             // 2. Fake black track create karo
             let blackTrack = black();
-    
+
             // 3. Saare connected peers ke paas black track replace karke bhej do
             for (let id in connection) {
                 let senders = connection[id].getSenders();
                 let videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
-                
+
                 if (videoSender && blackTrack) {
                     videoSender.replaceTrack(blackTrack);
                 }
             }
-        } 
+        }
         // CASE 2: Video wapas ON karni hai (Camera dynamic reload)
         else {
             console.log("Restoring Camera Stream...");
-    
+
             try {
                 // 1. Fresh camera tracks mangao browser se
                 let freshStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: audioAvailable });
                 let freshVideoTrack = freshStream.getVideoTracks()[0];
-    
+
                 // 2. Apne main localStream ke video track ko naye live track se badlo
                 if (window.localStream && freshVideoTrack) {
                     let oldVideoTrack = window.localStream.getVideoTracks()[0];
@@ -147,17 +154,17 @@ export default function VartaVideoComponent() {
                     }
                     window.localStream.addTrack(freshVideoTrack);
                 }
-    
+
                 // 3. Apni screen wapas live video feed par sync karo
                 if (localVideoRef.current && window.localStream) {
                     localVideoRef.current.srcObject = window.localStream;
                 }
-    
+
                 // 4. Peers ke pass black track hatakar fresh camera track replace karo
                 for (let id in connection) {
                     let senders = connection[id].getSenders();
                     let videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
-                    
+
                     if (videoSender && freshVideoTrack) {
                         videoSender.replaceTrack(freshVideoTrack);
                     }
@@ -184,8 +191,8 @@ export default function VartaVideoComponent() {
         window.localStream = stream;
         localVideoRef.current.srcObject = stream;
 
-        for (let id in connection){
-            if(id === socketIdRef.current) continue;
+        for (let id in connection) {
+            if (id === socketIdRef.current) continue;
             window.localStream.getTracks().forEach(track => {
                 connection[id].addTrack(track, window.localStream);
             })
@@ -216,15 +223,15 @@ export default function VartaVideoComponent() {
     }
 
     let getDisplayMedia = () => {
-        if(screenAvailable === true){
-            if(navigator.mediaDevices.getDisplayMedia) {
-                navigator.mediaDevices.getDisplayMedia({video : true, audio : true}).then(getDisplayMediaSuccess).then((stream) => {}).catch((e) => console.log(e));
+        if (screenAvailable === true) {
+            if (navigator.mediaDevices.getDisplayMedia) {
+                navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(getDisplayMediaSuccess).then((stream) => { }).catch((e) => console.log(e));
             }
         }
     }
 
     useEffect(() => {
-        if(screenSharing !== undefined){
+        if (screenSharing !== undefined) {
             getDisplayMedia();
         }
     })
@@ -332,8 +339,16 @@ export default function VartaVideoComponent() {
         }
     }
 
-    let addMessage = () => {
+    let addMessage = (data, sender, socketIdSender) => {
+        if(sender === usernameRef.current || socketIdSender === socketIdRef.current) return;
+        setMessages((prevMessages) => [
+            ...prevMessages,
+            { sender: sender, data: data }
+        ])
 
+        if (socketIdSender !== socketIdRef.current) {
+            setNewMessages((prevCount) => prevCount + 1);
+        }
     }
 
     let connectToSocketServer = () => {
@@ -441,17 +456,17 @@ export default function VartaVideoComponent() {
         } catch (e) {
             console.log("Silence track error:", e);
         }
-        
+
         return null;
     }
-    
+
     let black = ({ width = 640, height = 480 } = {}) => {
         let canvas = Object.assign(document.createElement('canvas'), { width, height });
         let ctx = canvas.getContext('2d');
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, width, height);
-        
-        let stream = canvas.captureStream(1); 
+
+        let stream = canvas.captureStream(1);
         let track = stream.getVideoTracks()[0];
         if (track) {
             return track;
@@ -468,6 +483,38 @@ export default function VartaVideoComponent() {
     let connect = () => {
         setAskForUsername(false);
         getMedia();
+
+        const meetingCode = window.location.pathname.split("/").pop() || "varta-session";
+        addUserHistory(meetingCode)
+        .then((res) => console.log("Meeting logged through Context!"))
+        .catch((err) => console.log("Context logging failed:", err));
+    }
+
+    let sendMessage = () => {
+        const payLoad = {
+            data: userMessage,
+            sender: username || "Anonymous",
+            roomPath: window.location.href,
+        }
+        socketRef.current.emit('chat-message', payLoad);
+
+        setMessages((prevMessages) => [
+            ...prevMessages,
+            { sender: "You", data: userMessage }
+        ]);
+
+        setUserMessage('');
+    }
+
+    let route = useNavigate();
+
+    let handleEndCall = () => {
+        try {
+            let tracks = localVideoRef.current.srcObject.getTracks();
+            tracks.forEach(track => track.stop());
+        }
+        catch (e) { }
+        route('/home');
     }
 
     return (
@@ -476,14 +523,38 @@ export default function VartaVideoComponent() {
             {askForUsername === true ?
                 <div>
                     <h2>Enter To Lobby</h2>
-                    <TextField id="outlined-basic" label="Username" value={username} onChange={e => setUsername(e.target.value)} variant="outlined" />
+                    <TextField id="outlined-basic" label="Username" value={username} onChange={e => {setUsername(e.target.value); usernameRef.current = e.target.value}} variant="outlined" />
                     <Button variant="contained" onClick={connect}>Connect</Button>
                     <div>
                         <video ref={localVideoRef} autoPlay muted></video>
                     </div>
                 </div> :
 
-                <div className={styles.vartaVideoContainer}>
+                <div className={styles.vartaVideoContainer} style={{ backgroundColor: 'rgb(65, 65, 65)' }}>
+
+                    {showModal === true ?
+                        <div className={styles.chatRoom}>
+                            <div className={styles.chatContainer}>
+                                <h1>Chat</h1>
+                                <div className={styles.ChattingDisplay}>
+                                    {messages.length === 0 ? <p>No Message Yet</p> :
+                                        messages.map((item, index) => {
+                                            return (
+                                                <div key={index} style={{ marginBottom: '20px' }}>
+                                                    <p style={{ fontWeight: 'bold' }}>{item.sender}</p>
+                                                    <p>{item.data}</p>
+                                                </div>
+                                            )
+                                        })
+                                    }
+                                </div>
+                                <div className={styles.textArea}>
+                                    <TextField id="outlined-basic" label="Type Something..." value={userMessage} onChange={e => setUserMessage(e.target.value)} variant="outlined" />
+                                    <Button variant="contained" onClick={sendMessage}>Send</Button>
+                                </div>
+                            </div>
+                        </div> : <></>
+                    }
 
                     <div className={styles.buttonContainer}>
                         <IconButton onClick={handleVideoToggle} style={{ color: 'white' }}>
@@ -495,7 +566,7 @@ export default function VartaVideoComponent() {
                         </IconButton>
 
                         {screenAvailable === true ?
-                            <IconButton onClick={handleScreen} style={{ color: "white"}}>
+                            <IconButton onClick={handleScreen} style={{ color: "white" }}>
                                 {(screenSharing === true) ? <ScreenShareIcon /> : <StopScreenShareIcon />}
                             </IconButton>
                             :
@@ -503,16 +574,19 @@ export default function VartaVideoComponent() {
                         }
 
                         <Badge badgeContent={newMessages} max={999} color='error'>
-                            <IconButton style={{ color: "white" }}>
+                            <IconButton onClick={() => {
+                                setShowModal(!showModal);
+                                setNewMessages(0);
+                            }} style={{ color: "white" }}>
                                 <ChatIcon />
                             </IconButton>
                         </Badge>
 
-                        <IconButton style={{ color: "white" , backgroundColor: 'red' , width: '90px', height: '40px',borderRadius: '8px' }}>
+                        <IconButton onClick={handleEndCall} style={{ color: "white", backgroundColor: 'red', width: '90px', height: '40px', borderRadius: '8px' }}>
                             <CallEnd />
                         </IconButton>
                     </div>
-                    <video className={styles.userVideo} ref={localVideoRef} autoPlay muted></video>
+                    <video style={{left : showModal ? "0" : "auto" , right : showModal ? "auto" : "0"}}className={styles.userVideo} ref={localVideoRef} autoPlay muted></video>
 
                     <div className={styles.conferenceView} key={video.socketId}>
                         {videos.filter((v, index, self) => self.findIndex(t => t.socketId === v.socketId) === index)
@@ -529,7 +603,7 @@ export default function VartaVideoComponent() {
                                 ></video>
                             )
                         )}
-                    </div> 
+                    </div>
                 </div>
             }
 

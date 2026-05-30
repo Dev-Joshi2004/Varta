@@ -1,0 +1,32 @@
+.navbar {
+    padding-inline: 1.2rem;
+    padding-block: 1.6rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar h2 {
+    font-size: 1.8rem;
+    font-weight: 500;
+}
+
+.homeMainContainer {
+    display: flex;
+    justify-content: space-between;
+    padding-inline: 3rem;
+    height: 80vh;
+    align-items: center;
+}
+
+.homeContainerText {
+    display: flex;
+    flex-direction : column;
+    font-size: 2rem;
+    gap: 20px;
+}
+
+.homeMainContainer .homeContainerImg img {
+    height: 65vh;
+    width: auto;
+}

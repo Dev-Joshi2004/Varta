@@ -1,13 +1,12 @@
 .vartaVideoContainer{
     position: relative;
     height: 100vh;
-    background-color: rgb(65, 65, 65);
 }
 
 .userVideo{
     position: absolute;
     bottom: 10vh;
-    right: 0;
+    left: 0;
     height: 20vh;
     width: auto;
     border-radius: 10px;
@@ -37,4 +36,26 @@
 
 .buttonContainer svg{
     font-size: 50px;
+}
+
+.chatRoom{
+    position: absolute;
+    right: 0;
+    height: 90vh;
+    width: 30vw;
+    background: white;
+    border-radius: 10px;
+    padding-inline: 20px;
+}
+
+.chatContainer {
+    position: relative;
+    height: 100%;
+}
+
+.textArea {
+    position: absolute;
+    bottom: 0;
+    display: flex;
+    align-items: center;
 }

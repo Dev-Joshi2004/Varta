@@ -5,6 +5,7 @@ import LandingPage from './pages/landing';
 import AuthenticationPage from './pages/authentication';
 import { AuthProvider } from './contexts/AuthContext';
 import VartaVideoComponent from './pages/vartaVideo';
+import HomeComponent from './pages/home';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
             <Route path='/' element={<LandingPage />} />
             <Route path='/auth' element={<AuthenticationPage />} />
             <Route path="/:url" element={<VartaVideoComponent />} />
+            <Route path="/home" element={<HomeComponent />} />
           </Routes>
           </AuthProvider>
       </Router>
